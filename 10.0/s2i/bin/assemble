@@ -150,6 +150,18 @@ function ismgmtup() {
   return 1
 }
 
+# Insert settings for mirrors/repository managers into settings.xml if supplied
+function configure_mirrors() {
+  if [ -n "$MAVEN_MIRROR_URL" ]; then
+    xml="    <mirror>\
+      <id>mirror.default</id>\
+      <url>$MAVEN_MIRROR_URL</url>\
+      <mirrorOf>external:*</mirrorOf>\
+    </mirror>"
+    sed -i "s|<!-- ### configured mirrors ### -->|$xml|" $HOME/.m2/settings.xml
+  fi
+}
+
 ADMIN=admin
 PASSWORD=passw0rd_
 
@@ -163,8 +175,23 @@ mkdir -p $DEPLOY_DIR
 
 # Copy the source for compilation
 cp -Rf /opt/s2i/destination/src/. $LOCAL_SOURCE_DIR
-chgrp -R 0 $LOCAL_SOURCE_DIR
-chmod -R g+rw $LOCAL_SOURCE_DIR
+
+if [ -d $LOCAL_SOURCE_DIR/configuration ]; then
+  echo "Copying config files from project..."
+
+  if [ -f $LOCAL_SOURCE_DIR/configuration/settings.xml ]; then
+    mkdir -p $HOME/.m2
+    mv $LOCAL_SOURCE_DIR/configuration/settings.xml $HOME/.m2
+  fi
+
+  cp -v $LOCAL_SOURCE_DIR/configuration/* /wildfly/standalone/configuration/
+fi
+
+configure_mirrors
+cat $HOME/.m2/settings.xml
+
+#chgrp -R 0 $LOCAL_SOURCE_DIR
+#chmod -R g+rw $LOCAL_SOURCE_DIR
 
 # If a pom.xml is present, this is a normal build scenario
 # so run maven.
@@ -199,7 +226,7 @@ else
   echo "Copying binaries in source directory into $DEPLOY_DIR for later deployment..."
   cp $LOCAL_SOURCE_DIR/*.war $DEPLOY_DIR >& /dev/null
   chgrp -R 0 $DEPLOY_DIR
-  chmod -R g+rw $DEPLOY_DIR  
+  chmod -R g+rw $DEPLOY_DIR
 fi
 
 if [ -d $LOCAL_SOURCE_DIR/target ]; then
